@@ -1,0 +1,1 @@
+The above codes are used to run the OFormer model for predicting CO2 gas saturation and pressure build-up. The dataset utilized in these predictions is sourced from https://github.com/gegewen/ufno/tree/main.
