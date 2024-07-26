@@ -1,9 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[3]:
-
-
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -13,15 +10,8 @@ from einops.layers.torch import Rearrange
 from torch.nn.init import xavier_uniform_, constant_, xavier_normal_, orthogonal_
 
 
-# In[ ]:
-
-
 def pair(t):
     return t if isinstance(t, tuple) else (t, t)
-
-
-# In[ ]:
-
 
 class PreNorm(nn.Module):
     def __init__(self, dim, fn):
@@ -31,10 +21,6 @@ class PreNorm(nn.Module):
 
     def forward(self, x, **kwargs):
         return self.fn(self.norm(x), **kwargs)
-
-
-# In[ ]:
-
 
 class PostNorm(nn.Module):
     def __init__(self, dim, fn):
@@ -294,10 +280,6 @@ class LinearAttention(nn.Module):
         out = rearrange(out, 'b h n d -> b n (h d)')
         return self.to_out(out)
 
-
-# In[ ]:
-
-
 class ReLUFeedForward(nn.Module):
     def __init__(self, dim, hidden_dim, dropout=0.):
         super().__init__()
@@ -507,10 +489,6 @@ class GeGELU(nn.Module):
     def forward(self, x):
         c = x.shape[-1]  # channel last arrangement
         return self.fn(x[..., :int(c//2)]) * x[..., int(c//2):]
-
-
-# In[ ]:
-
 
 class FeedForward(nn.Module):
     def __init__(self, dim, hidden_dim, dropout=0.):
