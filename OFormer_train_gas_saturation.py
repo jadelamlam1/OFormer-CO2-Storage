@@ -10,7 +10,7 @@ Usage:
     --lr 1e-3 \
     # --resume_training \
     # --path_to_resume ./logs/model_ckpt \
-    --epochs 140 \
+    --epochs 100 \
     --log_dir ./logs \
     --ckpt_every 5 \
     --in_channels 290 \
@@ -20,7 +20,7 @@ Usage:
     --encoder_heads 3 \
     --out_channels 1 \
     --decoder_emb_dim 168 \
-    --out_step 32 \
+    --out_step 4 \
     --propagator_depth 1 \
     --decoding_depth 1 \
     --fourier_frequency 8 \
