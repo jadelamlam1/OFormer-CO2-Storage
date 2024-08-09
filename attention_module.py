@@ -1,9 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[3]:
-
-
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -13,14 +10,8 @@ from einops.layers.torch import Rearrange
 from torch.nn.init import xavier_uniform_, constant_, xavier_normal_, orthogonal_
 
 
-# In[ ]:
-
-
 def pair(t):
     return t if isinstance(t, tuple) else (t, t)
-
-
-# In[ ]:
 
 
 class PreNorm(nn.Module):
@@ -31,10 +22,6 @@ class PreNorm(nn.Module):
 
     def forward(self, x, **kwargs):
         return self.fn(self.norm(x), **kwargs)
-
-
-# In[ ]:
-
 
 class PostNorm(nn.Module):
     def __init__(self, dim, fn):
@@ -66,23 +53,6 @@ class RotaryEmbedding(nn.Module):
                                            2).reshape(*freqs.shape[:-1], -1)
 
         return freqs  # [b, n, d]
-
-# class RotaryEmbedding(nn.Module):
-#     def __init__(self, dim, min_freq=1/100, scale=1.):
-#         super().__init__()
-#         inv_freq = 1. / (10000 ** (torch.arange(0, dim, 2).float() / dim))
-#         self.min_freq = min_freq
-#         self.scale = scale
-#         self.register_buffer('inv_freq', inv_freq)
-
-#     def forward(self, coordinates, device):
-#         # coordinates [b, n]
-#         t = coordinates.to(device).type_as(self.inv_freq)
-#         t = t * (self.scale / self.min_freq)
-#         freqs = torch.einsum('... i , j -> ... i j', t,
-#                              self.inv_freq)  # [b, n, d//2]
-#         return torch.cat((freqs, freqs), dim=-1)  # [b, n, d]
-
 
 def rotate_half(x):
     # Slicing to get even and odd indexed elements
