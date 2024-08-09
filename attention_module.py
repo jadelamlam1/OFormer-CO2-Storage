@@ -1,3 +1,9 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[3]:
+
+
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -7,8 +13,15 @@ from einops.layers.torch import Rearrange
 from torch.nn.init import xavier_uniform_, constant_, xavier_normal_, orthogonal_
 
 
+# In[ ]:
+
+
 def pair(t):
     return t if isinstance(t, tuple) else (t, t)
+
+
+# In[ ]:
+
 
 class PreNorm(nn.Module):
     def __init__(self, dim, fn):
@@ -18,6 +31,10 @@ class PreNorm(nn.Module):
 
     def forward(self, x, **kwargs):
         return self.fn(self.norm(x), **kwargs)
+
+
+# In[ ]:
+
 
 class PostNorm(nn.Module):
     def __init__(self, dim, fn):
@@ -43,7 +60,28 @@ class RotaryEmbedding(nn.Module):
         t = t * (self.scale / self.min_freq)
         freqs = torch.einsum('... i , j -> ... i j', t,
                              self.inv_freq)  # [b, n, d//2]
-        return torch.cat((freqs, freqs), dim=-1)  # [b, n, d]
+
+        # Interleave the freqs tensor
+        freqs = freqs.unsqueeze(-1).expand(-1, -1, -1,
+                                           2).reshape(*freqs.shape[:-1], -1)
+
+        return freqs  # [b, n, d]
+
+# class RotaryEmbedding(nn.Module):
+#     def __init__(self, dim, min_freq=1/100, scale=1.):
+#         super().__init__()
+#         inv_freq = 1. / (10000 ** (torch.arange(0, dim, 2).float() / dim))
+#         self.min_freq = min_freq
+#         self.scale = scale
+#         self.register_buffer('inv_freq', inv_freq)
+
+#     def forward(self, coordinates, device):
+#         # coordinates [b, n]
+#         t = coordinates.to(device).type_as(self.inv_freq)
+#         t = t * (self.scale / self.min_freq)
+#         freqs = torch.einsum('... i , j -> ... i j', t,
+#                              self.inv_freq)  # [b, n, d//2]
+#         return torch.cat((freqs, freqs), dim=-1)  # [b, n, d]
 
 
 def rotate_half(x):
@@ -120,7 +158,7 @@ class LinearAttention(nn.Module):
     """
     Contains following two types of attention, as discussed in "Choose a Transformer: Fourier or Galerkin"
 
-    Galerkin type attention, with instance normalization on Key and Value
+    Galerkin type attention, with layer normalization on Key and Value
     Fourier type attention, with instance normalization on Query and Key
     """
 
@@ -151,8 +189,8 @@ class LinearAttention(nn.Module):
         self.to_qkv = nn.Linear(dim, inner_dim * 3, bias=False)
 
         if attn_type == 'galerkin':
-            self.k_norm = nn.InstanceNorm1d(dim_head)
-            self.v_norm = nn.InstanceNorm1d(dim_head)
+            self.k_norm = nn.LayerNorm(dim_head)
+            self.v_norm = nn.LayerNorm(dim_head)
         elif attn_type == 'fourier':
             self.q_norm = nn.InstanceNorm1d(dim_head)
             self.k_norm = nn.InstanceNorm1d(dim_head)
@@ -237,8 +275,8 @@ class LinearAttention(nn.Module):
                 'Must pass in coordinates when under relative position embedding mode')
 
         if self.attn_type == 'galerkin':
-            k = self.norm_wrt_domain(k, self.k_norm)
-            v = self.norm_wrt_domain(v, self.v_norm)
+            k = self.k_norm(k)
+            v = self.v_norm(v)
         else:  # fourier
             q = self.norm_wrt_domain(q, self.q_norm)
             k = self.norm_wrt_domain(k, self.k_norm)
@@ -276,6 +314,10 @@ class LinearAttention(nn.Module):
             out = torch.matmul(q, dots) * (1./q.shape[2])
         out = rearrange(out, 'b h n d -> b n (h d)')
         return self.to_out(out)
+
+
+# In[ ]:
+
 
 class ReLUFeedForward(nn.Module):
     def __init__(self, dim, hidden_dim, dropout=0.):
@@ -322,8 +364,8 @@ class CrossLinearAttention(nn.Module):
         self.to_kv = nn.Linear(dim, inner_dim * 2, bias=False)
 
         if attn_type == 'galerkin':
-            self.k_norm = nn.InstanceNorm1d(dim_head)
-            self.v_norm = nn.InstanceNorm1d(dim_head)
+            self.k_norm = nn.LayerNorm(dim_head)
+            self.v_norm = nn.LayerNorm(dim_head)
         elif attn_type == 'fourier':
             self.q_norm = nn.InstanceNorm1d(dim_head)
             self.k_norm = nn.InstanceNorm1d(dim_head)
@@ -398,8 +440,8 @@ class CrossLinearAttention(nn.Module):
     def norm_wrt_domain(self, x, norm_fn):
         b = x.shape[0]
         return rearrange(
-            norm_fn(rearrange(x, 'b h n d -> (b h) n d')),
-            '(b h) n d -> b h n d', b=b)
+            norm_fn(rearrange(x, 'b h n d -> (b h) d n')),
+            '(b h) d n -> b h d n', b=b)
 
     def forward(self, x, z, x_pos=None, z_pos=None):
         # x (z^T z)
@@ -409,6 +451,7 @@ class CrossLinearAttention(nn.Module):
         n2 = z.shape[1]   # z [b, n2, d]
 
         q = self.to_q(x)
+        # k.shape[1] and v.shape[1] are n2 (after sampling), n1 = 19200
         kv = self.to_kv(z).chunk(2, dim=-1)
         k, v = map(lambda t: rearrange(
             t, 'b n (h d) -> b h n d', h=self.heads), kv)
@@ -419,8 +462,8 @@ class CrossLinearAttention(nn.Module):
         q = rearrange(q, 'b n (h d) -> b h n d', h=self.heads)
 
         if self.attn_type == 'galerkin':
-            k = self.norm_wrt_domain(k, self.k_norm)
-            v = self.norm_wrt_domain(v, self.v_norm)
+            k = self.k_norm(k)
+            v = self.v_norm(v)
         else:  # fourier
             q = self.norm_wrt_domain(q, self.q_norm)
             k = self.norm_wrt_domain(k, self.k_norm)
@@ -466,10 +509,11 @@ class CrossLinearAttention(nn.Module):
             v = torch.cat([z_pos, v], dim=-1)
 
         # The attention scores are computed by multiplying the transposed key vectors k with the value vectors v
+        # (b h d n2) * (b h n2 d) = (b h d d)
         dots = torch.matmul(k.transpose(-1, -2), v)
 
         # The computed dots tensor is then used to update the query representations by performing a matrix multiplication with the query tensor q. The resulting tensor is scaled by the inverse of the number of elements in z (n2), which normalizes the attention weights.
-        out = torch.matmul(q, dots) * (1./n2)
+        out = torch.matmul(q, dots) * (1./n2)  # (b h n1 d)*(b h d d) =
         # The resulting tensor is scaled by the inverse of the number of elements in z (n2), which normalizes the attention weights.
         out = rearrange(out, 'b h n d -> b n (h d)')
 
@@ -486,6 +530,10 @@ class GeGELU(nn.Module):
     def forward(self, x):
         c = x.shape[-1]  # channel last arrangement
         return self.fn(x[..., :int(c//2)]) * x[..., int(c//2):]
+
+
+# In[ ]:
+
 
 class FeedForward(nn.Module):
     def __init__(self, dim, hidden_dim, dropout=0.):
