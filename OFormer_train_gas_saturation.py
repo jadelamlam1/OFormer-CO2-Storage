@@ -6,7 +6,7 @@ Created on Thu Jul 25 15:27:52 2024
 This script trains a OFormer model to predict the CO2 saturation after the injection of CO2.
 
 Usage:
-    python OFormer_train_pressure.py \
+    python OFormer_train_gas_saturation.py \
     --lr 1e-3 \
     # --resume_training \
     # --path_to_resume ./logs/model_ckpt \
@@ -20,15 +20,16 @@ Usage:
     --encoder_heads 3 \
     --out_channels 1 \
     --decoder_emb_dim 168 \
-    --out_step 4 \
+    --out_step 32 \
     --propagator_depth 1 \
     --fourier_frequency 8 \
-    --aug_ratio 0.4 \
-    --batch_size 4 \
+    --aug_ratio 0.3 \
+    --batch_size 8 \
     --dataset_path /home/kint/Desktop/UFNO \
     --train_sample_num 4500 \
     --val_sample_num 500
     
+
 Author:
     Jade
 """
@@ -255,10 +256,10 @@ if __name__ == '__main__':
     print('Preparing the data')
 
     # Load the training and validation datasets
-    train_a = torch.load(f'{opt.dataset_path}/dP_train_a.pt')
-    train_u = torch.load(f'{opt.dataset_path}/dP_train_u.pt')
-    val_a = torch.load(f'{opt.dataset_path}/dP_val_a.pt')
-    val_u = torch.load(f'{opt.dataset_path}/dP_val_u.pt')
+    train_a = torch.load(f'{opt.dataset_path}/sg_train_a.pt')
+    train_u = torch.load(f'{opt.dataset_path}/sg_train_u.pt')
+    val_a = torch.load(f'{opt.dataset_path}/sg_val_a.pt')
+    val_u = torch.load(f'{opt.dataset_path}/sg_val_u.pt')
 
     # Print the shapes of the loaded datasets
     print(f"train_a shape: {train_a.shape}")  # Print the shape of 'train_a'
@@ -305,10 +306,8 @@ if __name__ == '__main__':
     for arg in vars(opt):
         logger.info(f'{arg}: {getattr(opt, arg)}')
 
-    # Define number of batches per epoch and total steps
-    num_batches_per_epoch = opt.train_sample_num // opt.batch_size
-    print(f'Number of batches per epoch:{num_batches_per_epoch}')
-    total_steps = opt.epochs * num_batches_per_epoch
+    # Define the total steps for scheduler
+    total_steps = math.ceil(opt.train_sample_num / opt.batch_size) * opt.epochs
     print(f'Total steps:{total_steps}')
 
     # Initialize start_epoch
@@ -394,15 +393,16 @@ if __name__ == '__main__':
             x = F.pad(F.pad(x, (0, 0, 0, 8, 0, 8), "replicate"),
                       (0, 0, 0, 0, 0, 0, 0, 8), 'constant', 0)
 
-            size_x, size_y, size_t = train_a.shape[1], train_a.shape[2], train_a.shape[3]
+            size_y, size_x, size_t = train_a.shape[1], train_a.shape[2], train_a.shape[3]
 
-            grids = rearrange(x, 'b x y t c -> b (x y) t c')
-            input_pos = prop_pos = grids[:, :, 0, -3:-1]  # [b (x y) 2]
+            grids = rearrange(x, 'b y x t c -> b (y x) t c')
+
+            input_pos = prop_pos = grids[:, :, 0, -3:-1]  # [b (y x) 2]
             del grids
 
             # [4, (96*200), (24*12)]
             input_channels = rearrange(
-                x[:, :, :, :, 0:9], 'b x y t c -> b (x y) (t c)')
+                x[:, :, :, :, 0:9], 'b y x t c -> b (y x) (t c)')
 
             if np.random.uniform() > (1-opt.aug_ratio):
                 sampling_ratio = np.random.uniform(0.45, 0.95)
@@ -416,26 +416,31 @@ if __name__ == '__main__':
 
             z = encoder.forward(x, input_pos)
 
-            x_out = decoder.rollout(z, prop_pos, size_t + 8, input_pos)
+            x_out = decoder.rollout(z, prop_pos, size_t+8, input_pos)
 
             x_out = rearrange(x_out, 'b (t c) (h w) -> b h w t c',
-                              h=size_x+8, w=size_y+8, t=size_t+8, c=1)
-            x_out = x_out.view(opt.batch_size, size_x+8, size_y+8,
+                              h=size_y+8, w=size_x+8, t=size_t+8, c=1)
+
+            # Dynamically calculate the batch size
+            current_batch_size = x.shape[0]
+
+            x_out = x_out.view(current_batch_size, size_y+8, size_x+8,
                                size_t+8, 1)[..., :-8, :-8, :-8, :]
+
             x_out = x_out.squeeze()
 
             ori_loss = 0
             der_loss = 0
 
             # original loss
-            for i in range(opt.batch_size):
+            for i in range(current_batch_size):
                 ori_loss += myloss(x_out[i, ...][mask[i, ...]].reshape(1, -1),
                                    y[i, ...][mask[i, ...]].reshape(1, -1))
 
             # 1st derivative loss
             dy_pred = (x_out[:, :, 2:, :] - x_out[:, :, :-2, :])/grid_dx
             mask_dy = mask[:, :, :198, :]
-            for i in range(opt.batch_size):
+            for i in range(current_batch_size):
                 der_loss += myloss(dy_pred[i, ...][mask_dy[i, ...]].reshape(
                     1, -1), dy[i, ...][mask_dy[i, ...]].view(1, -1))
 
@@ -495,33 +500,36 @@ if __name__ == '__main__':
                 for x, y in val_dataloader:
                     x, y = x.to(device), y.to(device)
 
-                    mask = (x[:, :, :, 0:1, 0] != 0).repeat(1, 1, 1, 24)
                     dy = (y[:, :, 2:, :] - y[:, :, :-2, :])/grid_dx
+                    mask = (x[:, :, :, 0:1, 0] != 0).repeat(1, 1, 1, 24)
 
                     x = F.pad(F.pad(x, (0, 0, 0, 8, 0, 8), "replicate"),
                               (0, 0, 0, 0, 0, 0, 0, 8), 'constant', 0)
 
+                    size_y, size_x, size_t = val_a.shape[1], val_a.shape[2], val_a.shape[3]
+
                     grids = rearrange(
-                        x, 'b x y t c -> b (x y) t c')  # [b (x y) 2]
+                        x, 'b y x t c -> b (y x) t c')  # [b (y x) 2]
 
                     input_pos = prop_pos = grids[:, :, 0, -3:-1]
                     del grids
 
                     input_channels = rearrange(
-                        x[:, :, :, :, 0:9], 'b x y t c -> b (x y) (t c)')  # [b (x y) (t c)]
+                        x[:, :, :, :, 0:9], 'b y x t c -> b (y x) (t c)')  # [b (y x) (t c)]
 
                     x = torch.cat((input_channels, input_pos), dim=-1)
 
-                    size_x, size_y, size_t = train_a.shape[1], train_a.shape[2], train_a.shape[3]
-
                     z = encoder.forward(x, input_pos)
-                    x_out = decoder.rollout(z, prop_pos, size_t + 8, input_pos)
+                    x_out = decoder.rollout(z, prop_pos, size_t+8, input_pos)
 
                     x_out = x_out = rearrange(
-                        x_out, 'b (t c) (h w) -> b h w t c', h=size_x+8, w=size_y+8, t=size_t+8, c=1)
+                        x_out, 'b (t c) (h w) -> b h w t c', h=size_y+8, w=size_x+8, t=size_t+8, c=1)
+
+                    # Dynamically calculate the batch size
+                    current_batch_size = x.shape[0]
 
                     x_out = x_out.view(
-                        opt.batch_size, size_x+8, size_y+8, size_t+8, 1)[..., :-8, :-8, :-8, :]
+                        current_batch_size, size_y+8, size_x+8, size_t+8, 1)[..., :-8, :-8, :-8, :]
                     x_out = x_out.squeeze()
 
                     # Compute losses as in training phase
@@ -529,7 +537,7 @@ if __name__ == '__main__':
                     der_loss = 0
 
                     # Original loss
-                    for i in range(opt.batch_size):
+                    for i in range(current_batch_size):
                         ori_loss += myloss(x_out[i, ...][mask[i, ...]].reshape(
                             1, -1), y[i, ...][mask[i, ...]].reshape(1, -1))
 
@@ -537,7 +545,7 @@ if __name__ == '__main__':
                     dy_pred = (x_out[:, :, 2:, :] -
                                x_out[:, :, :-2, :])/grid_dx
                     mask_dy = mask[:, :, :198, :]
-                    for i in range(opt.batch_size):
+                    for i in range(current_batch_size):
                         der_loss += myloss(dy_pred[i, ...][mask_dy[i, ...]].reshape(
                             1, -1), dy[i, ...][mask_dy[i, ...]].view(1, -1))
 
