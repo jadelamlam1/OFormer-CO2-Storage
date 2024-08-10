@@ -8,7 +8,7 @@ This project uses the OFormer model to predict CO2 gas saturation and pressure b
   
 ## Dataset
 
-The dataset can be downloaded from [Google Drive](https://drive.google.com/drive/folders/1fZQfMn_vsjKUXAfRV0q_gswtl8JEkVGo?usp=sharing), provided by Wen et al. in the [UFNO GitHub repository](https://github.com/gegewen/ufno).
+The dataset can be downloaded from [Google Drive](https://drive.google.com/drive/folders/1fZQfMn_vsjKUXAfRV0q_gswtl8JEkVGo?usp=sharing), provided by Wen et al. in the [U-FNO GitHub repository](https://github.com/gegewen/ufno).
 
 - **Train Set**: 4,500 samples
 - **Validation Set**: 500 samples
