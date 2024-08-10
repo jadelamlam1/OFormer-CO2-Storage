@@ -43,6 +43,7 @@ Pressure Build-up
 
 Use the pre-trained model model_checkpoint_epoch_140.ckpt:
 
+```bash
 python OFormer_test_pressure.py \
   --in_channels 290 \
   --encoder_emb_dim 68 \
