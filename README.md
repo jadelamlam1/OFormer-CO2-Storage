@@ -2,8 +2,6 @@
 
 This project uses the OFormer model to predict CO2 gas saturation and pressure build-up.
 
-# Model Training and Testing Instructions
-
 ## Requirements
 
 - PyTorch 1.8.0
