@@ -1,3 +1,7 @@
+# OFormer: Predicting CO2 Gas Saturation and Pressure Build-up
+
+This project uses the OFormer model to predict CO2 gas saturation and pressure build-up.
+
 # Model Training and Testing Instructions
 
 ## Requirements
