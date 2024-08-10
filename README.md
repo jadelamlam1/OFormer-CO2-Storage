@@ -1,5 +1,9 @@
 # Model Training and Testing Instructions
 
+## Requirements
+
+- PyTorch 1.8.0
+
 ## Training
 
 Ensure you have the following files: 
