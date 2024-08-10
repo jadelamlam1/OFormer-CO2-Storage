@@ -38,8 +38,9 @@ python OFormer_test_gas_saturation.py \
   --dataset_path /path/to/dataset \       # Change to your dataset path
   --checkpoint_path /path/to/checkpoints \     # Change to your checkpoint path
   --checkpoint_name model_checkpoint_epoch_100.ckpt
+```
 
-Pressure Build-up
+# Pressure Build-up
 
 Use the pre-trained model model_checkpoint_epoch_140.ckpt:
 
