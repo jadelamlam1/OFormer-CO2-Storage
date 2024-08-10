@@ -1,10 +1,27 @@
-The above code is used to run the OFormer model for predicting CO2 gas saturation and pressure build-up. The dataset utilized for these predictions is sourced from [this repository](https://github.com/gegewen/ufno/tree/main). To proceed, download the following files: `utils.py`, `attention.py`, `encoder_module.py`, `decoder_module.py`, and `lploss.py`. Then, run either `OFormer_train_gas_saturation.py` or `OFormer_train_pressure.py`. Parameters can be adjusted in these two files for optimization.
+# Model Training and Testing Instructions
+
+## Training
+
+Ensure you have the following files: 
+
+- `utils.py`
+- `attention.py`
+- `encoder_module.py`
+- `decoder_module.py`
+- `lploss.py`
+
+Then, run one of the following scripts to train the model:
+
+- `OFormer_train_gas_saturation.py`
+- `OFormer_train_pressure.py`
+
+You can adjust parameters within these files for optimization.
 
 ## Testing Instructions
 
 ### Gas Saturation
 
-Use the pre-trained model `model_checkpoint_epoch_100.py`:
+Use the pre-trained model `model_checkpoint_epoch_100.ckpt`:
 
 ```bash
 python OFormer_test_gas_saturation.py \
@@ -22,12 +39,10 @@ python OFormer_test_gas_saturation.py \
   --checkpoint_path /path/to/checkpoints \     # Change to your checkpoint path
   --checkpoint_name model_checkpoint_epoch_100.ckpt
 
-    
-### Pressure build-up
+Pressure Build-up
 
-Use the pre-trained model `model_checkpoint_epoch_140.py`:
+Use the pre-trained model model_checkpoint_epoch_140.ckpt:
 
-```bash
 python OFormer_test_pressure.py \
   --in_channels 290 \
   --encoder_emb_dim 68 \
