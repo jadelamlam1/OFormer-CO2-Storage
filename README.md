@@ -4,7 +4,7 @@ This project uses the OFormer model to predict CO2 gas saturation and pressure b
 
 ## Requirements
 
-- PyTorch 1.8.0
+- PyTorch 2.0.1
   
 ## Dataset
 
