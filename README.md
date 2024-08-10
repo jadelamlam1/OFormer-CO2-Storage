@@ -3,6 +3,15 @@
 ## Requirements
 
 - PyTorch 1.8.0
+  
+## Dataset
+
+The dataset can be downloaded from [Google Drive](https://drive.google.com/drive/folders/1fZQfMn_vsjKUXAfRV0q_gswtl8JEkVGo?usp=sharing).
+
+- **Train Set**: 4,500 samples
+- **Validation Set**: 500 samples
+- **Test Set**: 500 samples
+
 
 ## Training
 
