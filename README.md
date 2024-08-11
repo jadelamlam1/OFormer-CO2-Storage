@@ -74,8 +74,6 @@ python OFormer_test_pressure.py \
   --out_step 32 \
   --propagator_depth 1 \
   --fourier_frequency 8 \
-
-
   --dataset_path /path/to/dataset \       # Change to your dataset path
   --checkpoint_path /path/to/checkpoints \    # Change to your checkpoint path
   --checkpoint_name model_checkpoint_epoch_140.ckpt
