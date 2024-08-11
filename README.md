@@ -55,7 +55,7 @@ python OFormer_test_gas_saturation.py \
   --checkpoint_name model_checkpoint_epoch_100.ckpt
 ```
 
-![CO2_movement](https://github.com/user-attachments/assets/0fadf42c-6926-4e49-aea8-1a92923c735b)
+![CO2_movement](https://github.com/user-attachments/assets/4f098d5c-d219-438d-b85f-c39e0e1778ae)
 
 
 ### Pressure Build-up
