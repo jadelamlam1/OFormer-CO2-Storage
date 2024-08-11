@@ -31,6 +31,8 @@ import argparse
 
 # Third-Party Imports:
 import matplotlib.pyplot as plt
+import matplotlib as mpl
+import matplotlib.animation as animation
 import numpy as np
 import torch
 from einops import rearrange
@@ -271,10 +273,10 @@ for i, (x, y) in enumerate(test_loader):
     input_pos = prop_pos = grids[:, :, 0, -3:-1]  # [b (x y) 2]
     del grids
 
-    time_channels = rearrange(
+    input_channels = rearrange(
         x[:, :, :, :, 0:9], 'b x y t c -> b (x y) (t c)')  # [b (x y) (t c)]
 
-    x = torch.cat((time_channels, input_pos), dim=-1)
+    x = torch.cat((input_channels, input_pos), dim=-1)
 
     z = encoder.forward(x, input_pos)
     x_out = decoder.rollout(z, prop_pos, size_t + 8, input_pos)
@@ -363,14 +365,13 @@ for i, (x, y) in enumerate(test_loader):
 
     # Neural network forward pass and output processing
     grids = rearrange(x, 'b x y t c -> b (x y) t c')
-    print(f'grids shape:{grids.shape}')
     input_pos = prop_pos = grids[:, :, 0, -3:-1]  # [b (x y) 2]
     del grids
 
-    time_channels = rearrange(
+    input_channels = rearrange(
         x[:, :, :, :, 0:9], 'b x y t c -> b (x y) (t c)')  # [b (x y) (t c)]
 
-    x = torch.cat((time_channels, input_pos), dim=-1)
+    x = torch.cat((input_channels, input_pos), dim=-1)
 
     z = encoder.forward(x, input_pos)
     x_out = decoder.rollout(z, prop_pos, size_t + 8, input_pos)
@@ -448,11 +449,74 @@ for i, (x, y) in enumerate(test_loader):
         pc = pcolor(absolute_error)
         plt.colorbar(pc, fraction=0.02)
         plt.clim(0, np.max(absolute_error))  # Ensure the colorbar starts at 0
-        plt.title('|$dP-\hat{dP}$|, ' + f't={time_print[t]}')
+        plt.title(
+            f'|$dP-\hat{{dP}}$|, t={time_print[t]}, $R^2$={r2:.2f}, MAE={mae:.4f}')
         plt.xlim([0, 3500])
     plt.tight_layout()
     plt.show()
 
     # Optionally break after the first few samples for testing
-    if i >= 2:  # Limit to first 3 samples for quick checking
+    if i >= 0:  # Limit to first 3 samples for quick checking
         break
+
+# %%
+
+# Set the path to the ffmpeg executable
+# (Replace /home/kint/mambaforge/bin/ffmpeg with your path to your ffmpeg executable)
+mpl.rcParams['animation.ffmpeg_path'] = '/home/kint/mambaforge/bin/ffmpeg'
+
+# Create a figure for the plot
+fig = plt.figure(figsize=(15, 6))
+
+# Define the function that will be called at each 'frame' of the animation
+
+
+def update(t):
+    plt.clf()  # clear the current plot
+
+    # Same plotting code as before, but now using 't' as the time index
+    plt.subplot(4, 1, 1)
+    true_dP = y_plot[0, :, :, t][mask].reshape((thickness, -1))
+    pcolor(true_dP)
+    plt.title('$dP$ (bar), ' + f't={time_print[t]}')
+    plt.colorbar(fraction=0.02)
+    plt.clim(0, np.max(true_dP))
+    plt.xlim([0, 3500])
+
+    plt.subplot(4, 1, 2)
+    predicted_dP = pred_plot[0, :, :, t][mask].reshape((thickness, -1))
+    pcolor(predicted_dP)
+    plt.title('$\hat{dP}$ (bar), ' + f't={time_print[t]}')
+    plt.colorbar(fraction=0.02)
+    plt.clim(0, np.max(predicted_dP))
+    plt.xlim([0, 3500])
+
+    # Prepare the true and predicted values for R^2, MRE, and MAE calculation
+    y_t = y_plot[0, :, :, :][mask]
+    true_dP_flat = y_plot[0, :, :, t][mask].reshape(
+        (thickness, -1)).flatten()
+    y_p = pred_plot[0, :, :, :][mask]
+    predicted_dP_flat = predicted_dP.flatten()
+
+    # Calculate R^2, MRE, and MAE for this sample
+    r2 = r2_score(true_dP_flat, predicted_dP_flat)
+    mae = mean_absolute_error(true_dP_flat, predicted_dP_flat)
+
+    # Plot absolute error |dP - $\hat{dP}$|
+    plt.subplot(4, 1, 3)
+    absolute_error = np.abs(predicted_dP - true_dP)
+    pc = pcolor(absolute_error)
+    plt.colorbar(pc, fraction=0.02)
+    plt.clim(0, np.max(absolute_error))
+    plt.title(
+        f'|$dP-\hat{{dP}}$|, t={time_print[t]}, $R^2$={r2:.2f}, MAE={mae:.4f}')
+    plt.xlim([0, 3500])
+
+    plt.tight_layout()  # Adjust subplot spacing
+
+
+# Create the animation
+ani = animation.FuncAnimation(fig, update, frames=range(24))
+
+# Save the animation with slower fps
+ani.save('dP_movement.mp4', writer='ffmpeg', fps=3, dpi=100)

@@ -12,12 +12,12 @@ Usage:
     --encoder_heads 3 \
     --out_channels 1 \
     --decoder_emb_dim 168 \
-    --out_step 1 \
+    --out_step 32 \
     --propagator_depth 1 \
     --fourier_frequency 8 \
     --dataset_path /home/kint/Desktop/UFNO \
     --checkpoint_path /home/kint/Music/ufno/logs/model_ckpt/ \
-    --checkpoint_name model_checkpoint_epoch_100.ckpt 
+    --checkpoint_name model_checkpoint_epoch_100.ckpt
 
 Author:
     Jade
@@ -31,11 +31,14 @@ import argparse
 
 # Third-Party Imports:
 import matplotlib.pyplot as plt
+import matplotlib as mpl
+import matplotlib.animation as animation
 import numpy as np
 import torch
 from einops import rearrange
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 import torch.nn.functional as F
+
 
 # Local Application Imports:
 from decoder_module import PointWiseDecoder2D
@@ -230,10 +233,10 @@ for i, (x, y) in enumerate(test_loader):
     input_pos = prop_pos = grids[:, :, 0, -3:-1]  # [b (x y) 2]
     del grids
 
-    time_channels = rearrange(
+    input_channels = rearrange(
         x[:, :, :, :, 0:9], 'b x y t c -> b (x y) (t c)')  # [b (x y) (t c)]
 
-    x = torch.cat((time_channels, input_pos), dim=-1)
+    x = torch.cat((input_channels, input_pos), dim=-1)
 
     z = encoder.forward(x, input_pos)
     x_out = decoder.rollout(z, prop_pos, size_t + 8, input_pos)
@@ -251,14 +254,11 @@ for i, (x, y) in enumerate(test_loader):
     pred_plot = x_out.cpu().detach().numpy()
 
     # Flatten the arrays for R² and MRE calculation
-    y_t = y_plot[0, :, :, :][mask]
-
     y_true = y_plot[0, :, :, :][mask].reshape(
         (thickness, -1))  # (thickness,4800), 4800 came from 24*200
 
     y_true_flat = y_true.flatten()
 
-    y_p = pred_plot[0, :, :, :][mask]
     y_pred = pred_plot[0, :, :, :][mask].reshape((thickness, -1))
 
     y_pred_flat = y_pred.flatten()
@@ -308,7 +308,7 @@ print(f'Average Inference Time: {average_inference_time} seconds')
 
 # Plotting
 for i, (x, y) in enumerate(test_loader):
-    if i == 55:  # i-th samples, any number between 0 and 499
+    if i == 5:  # i-th samples, any number between 0 and 499
         x, y = x.to(device), y.to(device)
         x_plot = x.cpu().detach().numpy()
         y_plot = y.cpu().detach().numpy()
@@ -329,10 +329,10 @@ for i, (x, y) in enumerate(test_loader):
         input_pos = prop_pos = grids[:, :, 0, -3:-1]  # [b (x y) 2]
         del grids
 
-        time_channels = rearrange(
+        input_channels = rearrange(
             x[:, :, :, :, 0:9], 'b x y t c -> b (x y) (t c)')  # [b (x y) (t c)]
 
-        x = torch.cat((time_channels, input_pos), dim=-1)
+        x = torch.cat((input_channels, input_pos), dim=-1)
 
         z = encoder.forward(x, input_pos)
         x_out = decoder.rollout(z, prop_pos, size_t + 8, input_pos)
@@ -417,10 +417,75 @@ for i, (x, y) in enumerate(test_loader):
             plt.colorbar(pc, fraction=0.02)
             # Ensure the colorbar starts at 0
             plt.clim(0, np.max(absolute_error))
-            plt.title('|$SG-\hat{SG}$|, ' + f't={time_print[t]}')
+            plt.title(
+                f'|$SG-\hat{{SG}}$|, t={time_print[t]}, $R^2_{{plume}}$={r2:.2f}, MAE$_{{plume}}$={mae:.4f}')
             plt.xlim([0, 3500])
         plt.tight_layout()
         plt.show()
+
+# %%
+
+# Set the path to the ffmpeg executable
+# (Replace /home/kint/mambaforge/bin/ffmpeg with your path to your ffmpeg executable)
+mpl.rcParams['animation.ffmpeg_path'] = '/home/kint/mambaforge/bin/ffmpeg'
+
+# Create a figure for the plot
+fig = plt.figure(figsize=(15, 6))
+
+# Define the function that will be called at each 'frame' of the animation
+
+
+def update(t):
+    plt.clf()  # clear the current plot
+
+    # Same plotting code as before, but now using 't' as the time index
+    plt.subplot(4, 1, 1)
+    true_sg = y_plot[0, :, :, t][mask].reshape((thickness, -1))
+    pcolor(true_sg)
+    plt.title('$SG$ (-), ' + f't={time_print[t]}')
+    plt.colorbar(fraction=0.02)
+    plt.xlim([0, 3500])
+
+    plt.subplot(4, 1, 2)
+    predicted_sg = pred_plot[0, :, :, t][mask].reshape((thickness, -1))
+    pcolor(predicted_sg)
+    plt.title('$\hat{SG}$ (-), ' + f't={time_print[t]}')
+    plt.colorbar(fraction=0.02)
+    plt.xlim([0, 3500])
+
+    # Prepare the true and predicted values for R^2 and MAE calculation
+    true_sg_flat = y_plot[0, :, :, t][mask].reshape(
+        (thickness, -1)).flatten()
+    predicted_sg_flat = predicted_sg.flatten()
+
+    # Create mask where both original and predicted data are non-zero
+    non_zero_mask = (true_sg_flat != 0) & (predicted_sg_flat != 0)
+
+    # Apply the mask to both arrays to filter out zeros
+    filtered_y_true = true_sg_flat[non_zero_mask]
+    filtered_y_pred = predicted_sg_flat[non_zero_mask]
+
+    # Calculate R^2 and MAE
+    r2 = r2_score(filtered_y_true, filtered_y_pred)
+    mae = mean_absolute_error(filtered_y_true, filtered_y_pred)
+
+    plt.subplot(4, 1, 3)
+    absolute_error = np.abs(predicted_sg - true_sg)
+    pc = pcolor(absolute_error)
+    plt.colorbar(pc, fraction=0.02)
+    plt.clim(0, np.max(absolute_error))
+    plt.title(
+        f'|$SG-\hat{{SG}}$|, t={time_print[t]}, $R^2_{{plume}}$={r2:.2f}, MAE$_{{plume}}$={mae:.4f}')
+    plt.xlim([0, 3500])
+
+    plt.tight_layout()  # Adjust subplot spacing
+
+
+# Create the animation
+ani = animation.FuncAnimation(fig, update, frames=range(24))
+
+# Save the animation with slower fps
+ani.save('CO2_movement.mp4', writer='ffmpeg', fps=3, dpi=100)
 
 # %%
 
