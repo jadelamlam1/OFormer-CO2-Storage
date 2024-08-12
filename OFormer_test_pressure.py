@@ -460,7 +460,7 @@ for i, (x, y) in enumerate(test_loader):
         break
 
 # %%
-
+# Create Animations
 # Set the path to the ffmpeg executable
 # (Replace /home/kint/mambaforge/bin/ffmpeg with your path to your ffmpeg executable)
 mpl.rcParams['animation.ffmpeg_path'] = '/home/kint/mambaforge/bin/ffmpeg'
