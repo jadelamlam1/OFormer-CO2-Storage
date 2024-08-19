@@ -31,6 +31,7 @@ Then, run one of the following scripts to train the model:
 - `OFormer_train_pressure.py`
 
 You can adjust parameters within these files for optimization.
+- `Optuna_gas_saturation.py` can be used for hyperparameter tuning for the gas saturation dataset
 
 ## Testing Instructions
 
